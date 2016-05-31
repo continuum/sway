@@ -1,0 +1,58 @@
+#!/usr/bin/env node
+
+'use strict';
+
+var program = require('commander');
+var Sway = require('sway');
+var YAML = require('yamljs');
+var schemaObjectValidator = require('../lib/validation/validators').schemaObjectValidator;
+// Set name and version
+program._name = 'sway-validate';
+program.version('0.0.1');
+
+var spec;
+var file;
+process.stdin.setEncoding('utf8');
+
+program
+  .arguments('[filename]')
+  .description('validate a swagger specification or a schemaObject')
+  .option('-s, --schema', 'Validate a schemaObject')
+  .option('-y, --yaml', 'Verify a YAML extension (default: JSON)')
+  .option('-o, --object', 'Verify an SchemaObject (default: Complete Swagger specification)')
+  .parse(process.argv)
+  .action(function(filename) {
+    console.log("I'm here");
+    file = filename;
+    this.validate(filename);
+  });
+
+if (typeof file === 'undefined') {
+  process.stdin.on('readable', function(){
+    var chunk = process.stdin.read();
+    if (chunk !== null)
+      spec = chunk;
+  });
+  process.stdin.on('end', function () {
+    if (program.yaml)
+      validate(YAML.parse(spec));
+    else
+      validate(JSON.parse(spec));
+  });
+}
+
+function validate(input){
+  var p = Sway.create({definition: input})
+    .then(function(api) {
+      if (program.schema){
+        console.log(schemaObjectValidator(api));
+      }
+      else
+        console.log(api.validate());
+    })
+    .catch(function(err) {
+      if(err.errno == 34)
+        console.log("File don't exists");
+      console.log(err);
+    });
+}
