@@ -1,0 +1,103 @@
+#!/usr/bin/env node
+
+'use strict';
+
+var _ = require('lodash');
+var program = require('commander');
+var Sway = require('../index.js');
+var YAML = require('js-yaml');
+var fs = require('fs');
+var schemaObjectValidator = require('../lib/validation/validators').schemaObjectValidator;
+
+
+var definitionSkeleton = {
+  swagger: '2.0',
+  info: {
+    version: '0.0.0',
+    title: 'Skeleton API'
+  },
+  paths: {
+    "/": {
+      get: {
+        responses: {
+          "200": {
+            description: "OK"
+          }
+        }
+      }
+    }
+  },
+  definitions: {
+    SchemaUnderTest: {}
+  }
+}
+
+function schemaObjectPostValidation(results) {
+  var errors = results.errors;
+  var cleanPathAndMessage = function(warning_or_error) {
+    warning_or_error.message = warning_or_error.message.replace(
+      "#/definitions/SchemaUnderTest", "");
+    var path = warning_or_error.path
+    if (path[0] === 'definitions' && path[1] == 'SchemaUnderTest') {
+      path.splice(0, 2);
+    }
+    return warning_or_error;
+  };
+  var isSchemaUnderTestUnusedDefinition = function(warning) {
+    return warning.code === 'UNUSED_DEFINITION' &&
+      _.isEqual(warning.path, ['definitions', 'SchemaUnderTest'])
+  };
+  _.remove(results.warnings, isSchemaUnderTestUnusedDefinition);
+  return {
+    warnings: _.map(results.warings, cleanPathAndMessage),
+    errors: _.map(results.errors, cleanPathAndMessage)
+    // TODO: post process the inner component of errors and warnings too
+  }
+}
+
+function validate(input) {
+  var spec = (program.yaml ? YAML.safeLoad : JSON.parse)(input)
+  var postValidation = _.identity;
+  if (program.schema) {
+    definitionSkeleton.definitions.SchemaUnderTest = spec;
+    spec = definitionSkeleton;
+    postValidation = schemaObjectPostValidation;
+  }
+  return Sway.create({definition: spec})
+    .then(function(api) {
+      console.log(JSON.stringify(postValidation(api.validate())));
+    })
+    .catch(function(err) {
+      console.log(err);
+    });
+}
+
+function validateFromStdin() {
+  var content = []
+  process.stdin.resume();
+  process.stdin.on('data', function(data){
+    content.push(data);
+  });
+  process.stdin.on('end', function () {
+    validate(content.join(''));
+  });
+}
+
+var filename = null;
+program._name = 'sway-validate';
+program.version('1.0.0');
+program
+  .arguments('[filename]')
+  .description('validate a swagger specification or a schemaObject fragment')
+  .option('-s, --schema', 'Validate a schemaObject fragment')
+  .option('-y, --yaml', 'Use YAML format (default: JSON)')
+  .action(function(arg) {
+    filename = arg;
+  })
+  .parse(process.argv);
+
+if (filename !== null) {
+  validate(fs.readFileSync(filename, 'utf8'));
+} else {
+  validateFromStdin();
+}

@@ -25,7 +25,11 @@
     "type": "git",
     "url": "git://github.com/apigee-127/sway.git"
   },
+  "bin": {
+    "sway-validate": "./bin/sway-validate"
+  },
   "files": [
+    "bin",
     "index.js",
     "lib",
     "LICENSE"
@@ -60,6 +64,7 @@
     "vinyl-source-stream": "^1.1.0"
   },
   "dependencies": {
+    "commander": "^2.8.1",
     "debug": "^2.2.0",
     "js-base64": "^2.1.9",
     "js-yaml": "^3.5.2",
