@@ -26,7 +26,8 @@
     "url": "git://github.com/apigee-127/sway.git"
   },
   "bin": {
-    "sway-validate": "./bin/sway-validate"
+    "sway-validate": "./bin/sway-validate",
+    "sway-resolve": "./bin/sway-resolve"
   },
   "files": [
     "bin",

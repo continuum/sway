@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+
+'use strict';
+
+var _ = require('lodash');
+var program = require('commander');
+var Sway = require('../index.js');
+var YAML = require('js-yaml');
+var fs = require('fs');
+
+var definitionSkeleton = {
+  swagger: '2.0',
+  info: {
+    version: '0.0.0',
+    title: 'Skeleton API'
+  },
+  paths: {
+    "/": {
+      get: {
+        responses: {
+          "200": {
+            description: "OK"
+          }
+        }
+      }
+    }
+  },
+  definitions: {
+    SchemaUnderResolution: {}
+  }
+}
+
+function schemaObjectPostResolve(results) {
+  var schemaObjectDefinitions =
+    results.definition.definitions.SchemaUnderResolution;
+  var schemaObjectReferences = {};
+  _.each(results.references, function(value, key){
+      if (_.startsWith(key, '#/definitions/SchemaUnderResolution/')) {
+        var schemaObjectKey = key.replace('/definitions/SchemaUnderResolution', '');
+        schemaObjectReferences[schemaObjectKey] = value;
+      }
+  })
+  return {
+    definition: schemaObjectDefinitions,
+    references: schemaObjectReferences
+  }
+}
+
+function resolve(input) {
+  var spec = (program.yaml ? YAML.safeLoad : JSON.parse)(input)
+  var postResolve = _.identity;
+  if (program.schema) {
+    definitionSkeleton.definitions.SchemaUnderResolution = spec;
+    spec = definitionSkeleton;
+    postResolve = schemaObjectPostResolve;
+  }
+  return Sway.create({definition: spec})
+    .then(function(api) {
+      console.log(JSON.stringify(postResolve({
+        definition: api.definitionFullyResolved,
+        references: api.references
+      })));
+    })
+    .catch(function(err) {
+      console.log(err);
+    });
+}
+
+function resolveFromStdin() {
+  var content = []
+  process.stdin.resume();
+  process.stdin.on('data', function(data){
+    content.push(data);
+  });
+  process.stdin.on('end', function () {
+    resolve(content.join(''));
+  });
+}
+
+var filename = null;
+program._name = 'sway-resolve';
+program.version('1.0.0');
+program
+  .arguments('[filename]')
+  .description('resolve a swagger specification or a schemaObject fragment')
+  .option('-s, --schema', 'Resolve a schemaObject fragment')
+  .option('-y, --yaml', 'Use YAML format (default: JSON)')
+  .action(function(arg) {
+    filename = arg;
+  })
+  .parse(process.argv);
+
+if (filename !== null) {
+  resolve(fs.readFileSync(filename, 'utf8'));
+} else {
+  resolveFromStdin();
+}
